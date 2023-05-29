@@ -111,6 +111,6 @@
           }
         }
       }
-    }},
-  "defaultProject": "angular-refresh-token"
+    }
+  }
 }

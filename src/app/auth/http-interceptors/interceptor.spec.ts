@@ -1,4 +1,4 @@
-import { TestBed } from '@angular/core/testing';
+import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HTTP_INTERCEPTORS, HttpClient } from '@angular/common/http';
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 
@@ -53,7 +53,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
       expect(request.request.headers.has('Authorization')).toEqual(true);
     });
 
-    it('should refresh token', async () => {
+    it('should refresh token', fakeAsync(() => {
       authService.authenticate();
       httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
 
@@ -64,11 +64,11 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
           statusText: 'Unauthorized',
         }
       );
-      await wait(0);
+      tick();
       httpTestingController.expectOne(testUrl).flush(testData);
-    });
+    }));
 
-    it('should refresh token only once for multiple requests', async (done) => {
+    it('should refresh token only once for multiple requests', fakeAsync(() => {
       authService.authenticate();
       let counter = 0;
       const refreshSpy = spyOn(authService, 'refreshToken').and.returnValue(
@@ -96,36 +96,35 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
         )
       );
 
-      await wait(0);
+      tick();
       // continue requests after refreshing token
       httpTestingController.match(testUrl).forEach(request => request.flush(testData));
 
-      setTimeout(async () => {
-        httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
-        httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
-        httpClient.get(testUrl).subscribe((data) => {
-          expect(data).toEqual(testData);
-          done();
-          expect(refreshSpy.calls.count()).toBe(2, 'refreshToken called once');
-        });
+      tick(200);
 
-        requests = httpTestingController.match(testUrl);
-        // expect(requests.length).toEqual(2);
-        requests.forEach((request) =>
-          request.flush(
-            { error: 'invalid_grant' },
-            {
-              status: 401,
-              statusText: 'Unauthorized',
-            }
-          )
-        );
+      httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
+      httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
+      httpClient.get(testUrl).subscribe((data) => {
+        expect(data).toEqual(testData);
+        expect(refreshSpy.calls.count()).toBe(2, 'refreshToken called once');
+      });
 
-        await wait(0);
-        // continue requests after refreshing token
-        httpTestingController.match(testUrl).forEach(request => request.flush(testData));
-      }, 200);
-    });
+      requests = httpTestingController.match(testUrl);
+      // expect(requests.length).toEqual(2);
+      requests.forEach((request) =>
+        request.flush(
+          { error: 'invalid_grant' },
+          {
+            status: 401,
+            statusText: 'Unauthorized',
+          }
+        )
+      );
+
+      tick();
+      // continue requests after refreshing token
+      httpTestingController.match(testUrl).forEach(request => request.flush(testData));
+    }));
 
     it('should log out user if refreshToken failed', () => {
       authService.authenticate();
@@ -160,7 +159,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
       expect(logoutSpy).toHaveBeenCalled();
     });
 
-    it('should log out if user gets an error after first refreshing', async () => {
+    it('should log out if user gets an error after first refreshing', fakeAsync(() => {
       authService.authenticate();
       httpClient
         .get(testUrl)
@@ -175,7 +174,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
         }
       );
 
-      await wait(0);
+      tick();
       httpTestingController.expectOne(testUrl).flush(
         { error: 'invalid_grant' },
         {
@@ -184,7 +183,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
         }
       );
       expect(logoutSpy).toHaveBeenCalled();
-    });
+    }));
 
     if (interceptor !== BruteForceInterceptor) {
       it('should queue all requests while token is being refreshed', async () => {

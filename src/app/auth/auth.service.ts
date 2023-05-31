@@ -49,6 +49,9 @@ export class AuthService {
       accessToken: 'newToken',
     }).pipe(
       delay(0),
+      tap((res) => {
+        this.tokenSubject$.next(res.accessToken);
+      })
     );
   }
 

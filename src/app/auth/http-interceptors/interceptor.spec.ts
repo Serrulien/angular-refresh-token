@@ -53,19 +53,29 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
       expect(request.request.headers.has('Authorization')).toEqual(true);
     });
 
-    it('should refresh token', fakeAsync(() => {
+    it('should refresh token and use the new token fir request resend', fakeAsync(() => {
       authService.authenticate();
       httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
 
-      httpTestingController.expectOne(testUrl).flush(
+      tick();
+
+      const firstRequest = httpTestingController.expectOne(testUrl);
+      const firstToken = firstRequest.request.headers.get('Authorization');
+      firstRequest.flush(
         { error: 'invalid_grant' },
         {
           status: 401,
           statusText: 'Unauthorized',
         }
       );
+
       tick();
-      httpTestingController.expectOne(testUrl).flush(testData);
+
+      // token sucessfully refreshed, resend the request with the new token
+      const secondRequest = httpTestingController.expectOne(testUrl);
+      secondRequest.flush(testData);
+      const refreshedToken = secondRequest.request.headers.get('Authorization');
+      expect(refreshedToken).not.toEqual(firstToken);
     }));
 
     it('should refresh token only once for multiple requests', fakeAsync(() => {

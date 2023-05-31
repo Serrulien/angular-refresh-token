@@ -14,8 +14,8 @@ export class CaughtInterceptor implements HttpInterceptor {
     return this.authService.token$.pipe(
       map(token => req.clone({ setHeaders: { Authorization: `Bearer ${token}` } })),
       concatMap(authReq => next.handle(authReq)),
-      // Catch the 401 and handle it by refreshing the token and restarting the chain
-      // (where a new subscription to this.auth.token will get the latest token).
+      // Catch the 401 and handle it by refreshing the token and restarting the chain by using the source observable
+      // (where a new subscription to this.authService.token$ will get the latest token).
       catchError((err, restart) => {
         // If the request is unauthorized, try refreshing the token before restarting.
         if (err.status === 401 && retries === 0) {

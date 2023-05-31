@@ -9,6 +9,24 @@ import { catchError, delay } from 'rxjs/operators';
 import { CaughtInterceptor } from './caught.interceptor';
 import { RetryWhenInterceptor } from './retry-when.interceptor';
 
+/*
+
+x ---------| 401
+      y ---| 401
+            refresh token ----|
+                              x ---- ... (with new access token)
+
+
+x --------| 401
+          refresh token ----|
+                            x ---- ... (with new access token)
+
+x ---------| 401
+            refresh token ----| 401
+                              <!> redirect user to login page
+
+*/
+
 [
   BruteForceInterceptor,
   CaughtInterceptor,
@@ -20,7 +38,6 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
     let httpTestingController: HttpTestingController;
     const testUrl = '/api';
     const testData = { name: 'Test Data' };
-    const wait = ms => new Promise(res => setTimeout(res, ms));
 
     beforeEach(() => {
       TestBed.configureTestingModule({
@@ -107,20 +124,25 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
       );
 
       tick();
+
+      // interceptor send refresh token request
+      expect(refreshSpy.calls.count()).toBe(1, 'refreshToken called once');
+
       // continue requests after refreshing token
-      httpTestingController.match(testUrl).forEach(request => request.flush(testData));
+      // token is ok
+      requests = httpTestingController.match(testUrl);
+      // retry Unauthorized requests once token is refreshed
+      expect(requests.length).toEqual(2);
+      requests.forEach(request => request.flush(testData));
 
-      tick(200);
+      tick();
 
       httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
       httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
-      httpClient.get(testUrl).subscribe((data) => {
-        expect(data).toEqual(testData);
-        expect(refreshSpy.calls.count()).toBe(2, 'refreshToken called once');
-      });
+      httpClient.get(testUrl).subscribe((data) => expect(data).toEqual(testData));
 
       requests = httpTestingController.match(testUrl);
-      // expect(requests.length).toEqual(2);
+      expect(requests.length).toEqual(3);
       requests.forEach((request) =>
         request.flush(
           { error: 'invalid_grant' },
@@ -133,6 +155,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
 
       tick();
       // continue requests after refreshing token
+      expect(refreshSpy.calls.count()).toBe(2, 'refreshToken called once');
       httpTestingController.match(testUrl).forEach(request => request.flush(testData));
     }));
 
@@ -196,7 +219,7 @@ import { RetryWhenInterceptor } from './retry-when.interceptor';
     }));
 
     if (interceptor !== BruteForceInterceptor) {
-      it('should queue all requests while token is being refreshed', async () => {
+      it('should queue all requests while token is being refreshed', () => {
         authService.authenticate();
         httpClient.get(testUrl).subscribe();
         const firstRequest = httpTestingController.expectOne(testUrl);
